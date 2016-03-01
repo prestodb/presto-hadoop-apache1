@@ -499,8 +499,11 @@ public class UserGroupInformation {
    */
   public synchronized
   static UserGroupInformation getCurrentUser() throws IOException {
-    AccessControlContext context = AccessController.getContext();
-    Subject subject = Subject.getSubject(context);
+    Subject subject = AsSubjectInvoker.getCurrentUser();
+    if (subject == null) {
+      AccessControlContext context = AccessController.getContext();
+      subject = Subject.getSubject(context);
+    }
     if (subject == null || subject.getPrincipals(User.class).isEmpty()) {
       return getLoginUser();
     } else {
@@ -1167,9 +1170,20 @@ public class UserGroupInformation {
    * @param action the method to execute
    * @return the value from the run method
    */
-  public <T> T doAs(PrivilegedAction<T> action) {
+  public <T> T doAs(final PrivilegedAction<T> action) {
     logPriviledgedAction(subject, action);
-    return Subject.doAs(subject, action);
+    return AsSubjectInvoker.doAs(subject, new SubjectPrivilegedAction<T>() {
+      @Override
+      public T run()
+      {
+        return Subject.doAs(subject, action);
+      }
+    });
+  }
+
+  public <T> T doAs(SubjectPrivilegedAction<T> action) {
+    logPriviledgedAction(subject, action);
+    return AsSubjectInvoker.doAs(subject, action);
   }
 
   /**
@@ -1183,25 +1197,53 @@ public class UserGroupInformation {
    * @throws InterruptedException if the action throws an InterruptedException
    * @throws UndeclaredThrowableException if the action throws something else
    */
-  public <T> T doAs(PrivilegedExceptionAction<T> action
-                    ) throws IOException, InterruptedException {
+  public <T> T doAs(final PrivilegedExceptionAction<T> action
+                    ) throws IOException, InterruptedException
+  {
     try {
       logPriviledgedAction(subject, action);
-      return Subject.doAs(subject, action);
+      return AsSubjectInvoker.doAs(subject, new SubjectPrivilegedExceptionAction<T>()
+      {
+        @Override
+        public T run()
+                throws Exception
+        {
+          return Subject.doAs(subject, action);
+        }
+      });
+    }
+    catch (PrivilegedActionException pae) {
+      throw handleDoAsException(pae);
+    }
+  }
+
+  public <T> T doAs(SubjectPrivilegedExceptionAction<T> action
+  ) throws IOException, InterruptedException {
+    try {
+      logPriviledgedAction(subject, action);
+      return AsSubjectInvoker.doAs(subject, action);
     } catch (PrivilegedActionException pae) {
-      Throwable cause = pae.getCause();
-      LOG.error("PriviledgedActionException as:"+this+" cause:"+cause);
-      if (cause instanceof IOException) {
-        throw (IOException) cause;
-      } else if (cause instanceof Error) {
-        throw (Error) cause;
-      } else if (cause instanceof RuntimeException) {
-        throw (RuntimeException) cause;
-      } else if (cause instanceof InterruptedException) {
-        throw (InterruptedException) cause;
-      } else {
-        throw new UndeclaredThrowableException(pae,"Unknown exception in doAs");
-      }
+      throw handleDoAsException(pae);
+    }
+  }
+
+  private RuntimeException handleDoAsException(PrivilegedActionException pae)
+          throws IOException, InterruptedException
+  {
+    Throwable cause = pae.getCause();
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("PrivilegedActionException as:" + this + " cause:" + cause);
+    }
+    if (cause instanceof IOException) {
+      throw (IOException) cause;
+    } else if (cause instanceof Error) {
+      throw (Error) cause;
+    } else if (cause instanceof RuntimeException) {
+      throw (RuntimeException) cause;
+    } else if (cause instanceof InterruptedException) {
+      throw (InterruptedException) cause;
+    } else {
+      throw new UndeclaredThrowableException(pae,"Unknown exception in doAs");
     }
   }
 
