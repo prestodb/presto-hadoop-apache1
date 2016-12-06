@@ -159,7 +159,7 @@
             <groupId>org.slf4j</groupId>
             <artifactId>jcl-over-slf4j</artifactId>
             <version>${dep.slf4j.version}</version>
-            <scope>runtime</scope>
+            <scope>compile</scope>
         </dependency>
 
         <dependency>
@@ -217,6 +217,26 @@
                 </executions>
                 <configuration>
                     <failBuildInCaseOfConflict>true</failBuildInCaseOfConflict>
+                    <!-- overriding class org.apache.hadoop.security.UserGroupInformation - so we need an exception here -->
+                    <exceptions>
+                        <exception>
+                            <conflictingDependencies>
+                                <dependency>
+                                    <groupId>com.facebook.presto.hadoop</groupId>
+                                    <artifactId>hadoop-apache1</artifactId>
+                                    <version>${project.version}</version>
+                                </dependency>
+                                <dependency>
+                                    <groupId>org.apache.hadoop</groupId>
+                                    <artifactId>hadoop-core</artifactId>
+                                    <version>${dep.hadoop.version}</version>
+                                </dependency>
+                            </conflictingDependencies>
+                            <classes>
+                                <class>org.apache.hadoop.security.UserGroupInformation</class>
+                            </classes>
+                        </exception>
+                    </exceptions>
                 </configuration>
             </plugin>
 
@@ -311,6 +331,7 @@
                                         <exclude>*.properties</exclude>
                                         <exclude>bin.tgz</exclude>
                                         <exclude>webapps/**</exclude>
+                                        <exclude>org/apache/hadoop/security/UserGroupInformation*.class</exclude>
                                     </excludes>
                                 </filter>
                                 <filter>
